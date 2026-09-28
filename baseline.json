@@ -1,0 +1,10 @@
+{
+    "experiment": "baseline_v1",
+    "number_of_test_cases": 20,
+    "metrics": {
+        "answer_relevancy": 1.0,
+        "faithfulness": 1.0,
+        "context_relevancy": 0.8958333333333334,
+        "correctness": 0.911591404219808
+    }
+}
