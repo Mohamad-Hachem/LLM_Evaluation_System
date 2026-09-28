@@ -2,13 +2,13 @@ import json
 from statistics import mean
 
 
-with open("evaluated_results2.jsonl", "r", encoding="utf-8") as file:
+with open("evaluated_results3.jsonl", "r", encoding="utf-8") as file:
     results = [json.loads(line) for line in file]
 
 
-baseline = {
-    "experiment": "baseline_v2",
-
+experiment = {
+    "experiment": "experiment_v3_k1",
+    "retriever_k": 1,
     "number_of_test_cases": len(results),
 
     "metrics": {
@@ -28,8 +28,8 @@ baseline = {
 }
 
 
-with open("baseline2.json", "w", encoding="utf-8") as file:
-    json.dump(baseline, file, indent=4)
+with open("experiment_v3.json", "w", encoding="utf-8") as file:
+    json.dump(experiment, file, indent=4)
 
 
-print("Baseline saved to baseline.json")
+print("Experiment saved to experiment_v3.json")
