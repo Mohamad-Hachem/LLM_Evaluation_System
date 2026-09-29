@@ -6,7 +6,7 @@ import pandas as pd
 st.title("LLM Evaluation Dashboard")
 
 
-with open("experiments_summary.json", "r", encoding="utf-8") as file:
+with open("full_criteria_testing/experiments_summary.json", "r", encoding="utf-8") as file:
     experiments = json.load(file)
 
 
@@ -39,20 +39,6 @@ chart_df = df.set_index("Experiment")
 
 st.bar_chart(chart_df)
 
-st.subheader("Experiment Comparison")
-
-st.dataframe(
-    df,
-    use_container_width=True,
-    hide_index=True
-)
-
-
-st.subheader("Metrics Comparison")
-
-chart_df = df.set_index("Experiment")
-
-st.bar_chart(chart_df)
 
 st.subheader("Inspect Experiment")
 
