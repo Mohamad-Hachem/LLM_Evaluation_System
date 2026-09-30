@@ -1,5 +1,5 @@
 {
-    "experiment": "experiment_v3_k3",
+    "experiment": "experiment_v3_k2",
     "retriever_k": 3,
     "number_of_test_cases": 20,
     "metrics": {

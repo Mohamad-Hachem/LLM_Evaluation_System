@@ -1,6 +1,6 @@
 # LLM Evaluation System
 
-> A hands-on RAG evaluation lab: ask questions about a PDF, score the answers with DeepEval, and compare what changes when retrieval returns one, two, or three passages.
+> A compact evaluation lab for one RAG pipeline: ask questions about a penguin PDF, score the answers with DeepEval, and compare saved evaluation runs.
 
 ![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)
 ![DeepEval](https://img.shields.io/badge/Evaluation-DeepEval-147D64)
@@ -9,128 +9,113 @@
 ![Streamlit](https://img.shields.io/badge/Dashboard-Streamlit-FF4B4B?logo=streamlit&logoColor=white)
 ![uv](https://img.shields.io/badge/Packages-uv-DE5FE9)
 
-This repository follows **20 question-and-answer pairs** about a penguin PDF through retrieval, answer generation, per-case evaluation, and experiment comparison. The committed results and dashboard let you explore the findings before making any API calls.
+This project evaluates a single LangChain RAG pipeline against 20 question-and-answer pairs about [`pdfs/Penguins_ACL.pdf`](pdfs/Penguins_ACL.pdf). The only active RAG implementation is [`RAG1/`](RAG1/); the [`versions/`](versions/) folders are saved evaluation runs and scripts for that same pipeline.
 
-![Streamlit dashboard comparing the saved retrieval experiments](screenshots/Screenshot_1.png)
+![Streamlit dashboard screenshot from the saved evaluation comparison](screenshots/Screenshot_1.png)
 
 ## Contents
 
-- [What you will learn](#what-you-will-learn)
-- [Results](#results)
-- [How it works](#how-it-works)
-- [Evaluation metrics](#evaluation-metrics)
-- [Get started](#get-started)
-- [Run your own evaluations](#run-your-own-evaluations)
-- [Explore the dashboard](#explore-the-dashboard)
-- [Project map](#project-map)
-- [Teaching path](#teaching-path)
-- [Practical notes](#practical-notes)
+- [Current Structure](#current-structure)
+- [Saved Results](#saved-results)
+- [How It Works](#how-it-works)
+- [Evaluation Metrics](#evaluation-metrics)
+- [Get Started](#get-started)
+- [Run Evaluations](#run-evaluations)
+- [Dashboard](#dashboard)
+- [Project Map](#project-map)
+- [Practical Notes](#practical-notes)
 
-## What You Will Learn
+## Current Structure
 
-- Build evaluation cases from a question, an expected answer, the model's actual answer, and the passages it retrieved.
-- Separate answer quality from retrieval quality with four DeepEval metrics.
-- See why evaluating a model-written citation is different from evaluating the passages the retriever actually returned.
-- Change the retriever's `k` value and inspect the effect on context relevance and answer correctness.
-- Move from individual JSONL scores to averages, pass rates, and a visual experiment comparison.
+The project is now organized around these pieces:
 
-## Results
+| Path | Role |
+|---|---|
+| [`RAG1/`](RAG1/) | The only active RAG implementation |
+| [`pdfs/Penguins_ACL.pdf`](pdfs/Penguins_ACL.pdf) | Source document used for retrieval |
+| [`eval_dataset.jsonl`](eval_dataset.jsonl) | 20 evaluation questions with expected answers |
+| [`versions/v1/`](versions/v1/), [`versions/v2/`](versions/v2/), [`versions/v3/`](versions/v3/) | Saved evaluation runs plus runner, scorer, and summary scripts |
+| [`single_tests/`](single_tests/) | Small DeepEval examples for one metric at a time |
+| [`experiment_v1.jsonl`](experiment_v1.jsonl), [`experiment_v2.jsonl`](experiment_v2.jsonl), [`experiment_v3.jsonl`](experiment_v3.jsonl) | Root-level evaluation summaries |
+| [`dashboard.py`](dashboard.py) | Streamlit dashboard for the three root-level evaluation summaries |
 
-These are the **saved averages over 20 questions** in [`experiments_summary.json`](full_criteria_testing/experiments_summary.json). Higher scores are better; this is one recorded run, not a guarantee that the same settings will win on another dataset or judge run.
+The `versions/vN` folders are not separate RAG implementations. Each runner imports the same [`RAG1.agent.ask`](RAG1/agent.py) function; only the saved run outputs and script names differ.
 
-| Experiment | Retrieved passages (`k`) | Answer relevancy | Faithfulness | Context relevancy | Correctness |
-|---|---:|---:|---:|---:|---:|
-| `baseline_v2` | 3 | **1.000** | 1.000 | 0.386 | **0.935** |
-| `experiment_v3_k1` | 1 | 0.979 | 1.000 | **0.739** | 0.877 |
-| `experiment_v4_k2` | 2 | 0.980 | 1.000 | 0.499 | 0.924 |
+## Saved Results
 
-In this snapshot, retrieving one passage produces the most relevant context, while retrieving three has the highest correctness score. That trade-off is the point of the lab: look at *which* metric moved, then inspect the underlying cases before choosing a setting.
+The root evaluation summaries contain one JSON object each, despite the `.jsonl` extension. These are the checked-in averages over 20 cases:
 
-The earlier `v1` result is kept as a teaching example, but is not in this comparison. Its `context` field comes from the model's structured answer; `v2` and later record the **actual retrieved passages**. That change makes the retrieval-side metrics more meaningful.
+| Summary file | Run label | Saved retriever `k` | Answer relevancy | Faithfulness | Context relevancy | Correctness |
+|---|---|---:|---:|---:|---:|---:|
+| [`experiment_v1.jsonl`](experiment_v1.jsonl) | `experiment_v1_k3` | 3 | 0.988 | 1.000 | 0.733 | 0.900 |
+| [`experiment_v2.jsonl`](experiment_v2.jsonl) | `experiment_v2_k1` | 3 | 1.000 | 1.000 | 0.781 | 0.915 |
+| [`experiment_v3.jsonl`](experiment_v3.jsonl) | `experiment_v3_k2` | 3 | 1.000 | 1.000 | 0.787 | 0.890 |
+
+These are saved snapshots, not guaranteed reproducible scores. DeepEval metrics use LLM judges, so reruns can vary. The dashboard displays the run labels and `retriever_k` values exactly as stored in these summary files.
 
 ## How It Works
 
 ```mermaid
 flowchart LR
-    P["Penguins_ACL.pdf"] --> X["PyMuPDF paragraph extraction"]
-    X --> V["OpenAI embeddings + in-memory vector store"]
-    V --> A["RAG agent"]
-    Q["20 questions + expected answers"] --> A
-    A --> R["Actual answers + context"]
-    R --> D["DeepEval metrics"]
-    Q --> D
-    D --> J["Per-case JSONL scores"]
-    J --> C["CLI averages and pass rates"]
-    S["Saved experiment summary"] --> U["Streamlit dashboard"]
+    PDF["pdfs/Penguins_ACL.pdf"] --> Reader["RAG1/file_reader.py"]
+    Reader --> Index["RAG1/indexing.py"]
+    Index --> Store["OpenAI embeddings + InMemoryVectorStore"]
+    Store --> Tool["RAG1/tools.py collecting_info"]
+    Tool --> Agent["RAG1/agent.py"]
+    Data["eval_dataset.jsonl"] --> Runner["versions/vN/eval_runnerN.py"]
+    Agent --> Runner
+    Runner --> Results["resultsN.jsonl"]
+    Results --> Eval["eval_all_metricsN_fast.py"]
+    Eval --> Scored["evaluated_resultsN.jsonl"]
+    Scored --> Summary["evaluation_summaryN.py"]
 ```
 
-The agent uses `gpt-4o` to answer questions and `text-embedding-3-large` to index paragraphs from [`Penguins_ACL.pdf`](RAG/pdfs/Penguins_ACL.pdf). Each RAG variant rebuilds an in-memory vector store when imported. All four variants use the same PDF and question set.
+The live RAG path:
 
-| Version | Agent | Retrieval | Context recorded for evaluation |
-|---|---|---:|---|
-| `v1` | [`RAG/`](RAG/) | `k=3` | Model-written `context` string |
-| `v2` | [`RAG2/`](RAG2/) | `k=3` | List of retrieved passages |
-| `v3` | [`RAG3/`](RAG3/) | `k=1` | List of retrieved passages |
-| `v4` | [`RAG4/`](RAG4/) | `k=2` | List of retrieved passages |
+1. [`RAG1/file_reader.py`](RAG1/file_reader.py) extracts text blocks from the PDF with PyMuPDF.
+2. [`RAG1/indexing.py`](RAG1/indexing.py) embeds those chunks with `text-embedding-3-large` and stores them in a LangChain `InMemoryVectorStore`.
+3. [`RAG1/tools.py`](RAG1/tools.py) exposes a retrieval tool called `collecting_info`.
+4. [`RAG1/agent.py`](RAG1/agent.py) builds a LangChain agent with `gpt-4o`, calls the retrieval tool, and returns a structured `answer` plus `context`.
+5. The evaluation runner scripts call the same RAG over all 20 dataset rows and save JSONL output.
 
 ## Evaluation Metrics
 
-| Metric in this project | DeepEval implementation | What it asks | Main inputs |
+| Metric | DeepEval implementation | What it checks | Main inputs |
 |---|---|---|---|
-| Answer relevancy | `AnswerRelevancyMetric` | Does the answer address the question? | Question, actual answer |
-| Faithfulness | `FaithfulnessMetric` | Is the answer supported by the retrieved passages? | Actual answer, retrieved context |
-| Context relevancy | `ContextualRelevancyMetric` | Are the retrieved passages useful for the question? | Question, retrieved context |
-| Correctness | Custom `GEval` criterion | Is the answer factually correct relative to the expected answer? | Actual answer, expected answer |
+| Answer relevancy | `AnswerRelevancyMetric` | Whether the answer addresses the question | Question, actual answer |
+| Faithfulness | `FaithfulnessMetric` | Whether the answer is supported by the supplied context | Actual answer, retrieval context |
+| Context relevancy | `ContextualRelevancyMetric` | Whether the retrieved context is useful for the question | Question, retrieval context |
+| Correctness | `GEval` | Whether the answer is factually correct against the expected answer | Actual answer, expected answer |
 
-The first three metrics are configured with a `0.7` threshold. The summary scripts use `0.7` to calculate pass rates for **all four** scores. `GEval` is an LLM-judged comparison, not a string match.
-
-The data moves through three simple formats:
-
-| Stage | Example file | Contents |
-|---|---|---|
-| Evaluation set | [`eval_dataset.jsonl`](data/orginial_Q_A/eval_dataset.jsonl) | One `question` and `expected_answer` per line |
-| RAG output | [`results2.jsonl`](full_criteria_testing/v2/results2.jsonl) | Adds `actual_answer` and a `context` list of retrieved passages |
-| Scored output | [`evaluated_results2.jsonl`](full_criteria_testing/v2/evaluated_results2.jsonl) | Adds the four numeric metric scores to each case |
+The metric scripts use a `0.7` threshold. The `*_fast.py` scripts batch the evaluation through `deepeval.evaluate(...)` and write the scored JSONL files.
 
 ## Get Started
 
-### Prerequisites
+### Requirements
 
 | Requirement | Why |
 |---|---|
-| Python 3.12+ | Required by `pyproject.toml` |
-| `uv` | Installs and runs the locked Python environment (`pip install uv` if needed) |
-| OpenAI API key | Needed only when generating answers, embeddings, or new DeepEval scores |
+| Python 3.12+ | Required by [`pyproject.toml`](pyproject.toml) |
+| `uv` | Installs and runs the locked environment |
+| OpenAI API key | Needed for embeddings, answer generation, and DeepEval judge calls |
 
-1. [Fork this repository](https://github.com/Mohamad-Hachem/LLM_Evaluation_System/fork), then clone your fork:
+Install dependencies from the repository root:
 
-   ```bash
-   git clone https://github.com/<your-username>/LLM_Evaluation_System.git
-   cd LLM_Evaluation_System
-   ```
+```bash
+uv sync
+```
 
-2. Install the dependencies:
+To inspect a saved run without making API calls:
 
-   ```bash
-   uv sync
-   ```
+```bash
+cd versions/v2
+uv run python evaluation_summary2.py
+cd ../..
+```
 
-3. Explore the included results without an API key. **From the repository root:**
+Repeat the same pattern in `versions/v1` or `versions/v3` to summarize another saved run.
 
-   ```bash
-   cd full_criteria_testing
-   uv run streamlit run ../dashboard.py
-   ```
-
-   Open the local URL printed by Streamlit. Run it from `full_criteria_testing/` because [`dashboard.py`](dashboard.py) reads `experiments_summary.json` from the current working directory.
-
-For a terminal summary of a saved experiment, run `python evaluation_summary2.py` from `full_criteria_testing/v2/`. The versioned summary scripts use only the committed scored JSONL files and Python's standard library.
-
-## Run Your Own Evaluations
-
-These steps call OpenAI for embeddings, answers, and/or evaluation judgments, so they may take time and incur API charges.
-
-### 1. Configure your key
+## Run Evaluations
 
 Create a `.env` file in the repository root:
 
@@ -138,69 +123,86 @@ Create a `.env` file in the repository root:
 OPENAI_API_KEY=your_openai_api_key_here
 ```
 
-The repository ignores `.env`. The commands below use `uv run --env-file .env` so both the RAG code and DeepEval can see the key.
-
-### 2. Score one example
-
-From the repository root:
+Run a single metric example:
 
 ```bash
-uv run --env-file .env python single_criteria_testing/test_single_eval.py
+uv run --env-file .env python single_tests/test_single_eval_answer_relevancy.py
+uv run --env-file .env python single_tests/test_single_eval_faithfulness.py
+uv run --env-file .env python single_tests/test_single_eval_context_relevancy.py
+uv run --env-file .env python single_tests/test_single_eval_correctness.py
 ```
 
-This prints the answer relevancy score, the judge's reason, and whether the `0.7` threshold passed. [`single_criteria_testing/`](single_criteria_testing/) also contains standalone faithfulness and context relevancy examples.
-
-### 3. Run all 20 cases
-
-Start with `v2`, the `k=3` baseline that stores actual retrieved passages. **Run every command from the repository root**; the scripts use paths relative to the current working directory.
+Run all 20 cases with one of the saved-run script sets from the repository root:
 
 ```bash
-cp data/orginial_Q_A/eval_dataset.jsonl eval_dataset.jsonl
-uv run --env-file .env python -m full_criteria_testing.v2.eval_runner2
-uv run --env-file .env python -m full_criteria_testing.v2.eval_all_metrics2
-uv run python -m full_criteria_testing.v2.evaluation_summary2
+uv run --env-file .env python versions/v3/eval_runner3.py
+uv run --env-file .env python versions/v3/eval_all_metrics3_fast.py
+uv run python versions/v3/evaluation_summary3.py
 ```
 
-`cp` works in Bash and PowerShell. This run writes `results2.jsonl` and `evaluated_results2.jsonl` to the repository root. The runner generates answers first; the scorer then evaluates those saved answers; the summary reports averages and pass rates.
+Change the folder and filename number to use the `v1`, `v2`, or `v3` script set. These scripts all call the same `RAG1` pipeline. When the commands are started from the repository root, the generated `resultsN.jsonl` and `evaluated_resultsN.jsonl` files are written to the root directory. The checked-in saved copies live under `versions/vN/`.
 
-To repeat the experiment, use the corresponding modules in `full_criteria_testing/v1/`, `v3/`, or `v4/`. Their runner, scorer, and summary filenames follow the same pattern (`eval_runner3.py`, `eval_all_metrics3.py`, `evaluation_summary3.py` for `v3`, for example). Keep the same evaluation set when comparing variants.
+To test a different retrieval size, edit the `k` value in [`RAG1/tools.py`](RAG1/tools.py):
 
-## Explore the Dashboard
+```python
+docs = vectore_store.similarity_search(query, k=2)
+```
 
-The dashboard compares the three experiments with real retrieved context (`v2` to `v4`). Its chart makes the change in context relevancy across `k` values easy to spot:
+Then rerun the runner, scorer, and summary scripts. Update the evaluation summary label so it matches the setting you actually ran.
 
-![Stacked metric chart comparing the three experiments](screenshots/Screenshot_3.png)
+## Dashboard
 
-Select an experiment to inspect its four average scores:
+The Streamlit dashboard reads the three root summaries directly:
 
-![Metric readout for the selected k=2 experiment](screenshots/Screenshot_2.png)
+| File | Displayed as |
+|---|---|
+| [`experiment_v1.jsonl`](experiment_v1.jsonl) | `experiment_v1_k3` |
+| [`experiment_v2.jsonl`](experiment_v2.jsonl) | `experiment_v2_k1` |
+| [`experiment_v3.jsonl`](experiment_v3.jsonl) | `experiment_v3_k2` |
 
-The dashboard reads the **committed snapshot** in [`full_criteria_testing/experiments_summary.json`](full_criteria_testing/experiments_summary.json). Running a new evaluation creates JSONL files but does not update that dashboard file automatically. Add your new experiment's averaged metrics to the summary JSON to display it.
+Run it from the repository root:
+
+```bash
+uv run streamlit run dashboard.py
+```
+
+The first view shows all saved evaluation runs and their four metric averages:
+
+![Dashboard table of the three saved evaluation runs](screenshots/Screenshot_1.png)
+
+The metric comparison chart stacks the four scores for each run:
+
+![Metric comparison chart for the three saved runs](screenshots/Screenshot_4.png)
+
+Use the run inspector to focus on one saved run at a time:
+
+![Run inspector showing retriever k, test count, and metric scores](screenshots/Screenshot_2.png)
+
+The final table highlights the best saved run for each metric:
+
+![Best score by metric table](screenshots/Screenshot_3.png)
 
 ## Project Map
 
 | Path | Purpose |
 |---|---|
-| [`RAG/`](RAG/), [`RAG2/`](RAG2/), [`RAG3/`](RAG3/), [`RAG4/`](RAG4/) | PDF extraction, embedding index, retrieval tool, prompt, and answer agent for each version |
-| [`data/orginial_Q_A/eval_dataset.jsonl`](data/orginial_Q_A/eval_dataset.jsonl) | The 20-question evaluation set (directory spelling is preserved from the repository) |
-| [`single_criteria_testing/`](single_criteria_testing/) | Small scripts for learning one DeepEval metric at a time |
-| [`full_criteria_testing/`](full_criteria_testing/) | Versioned runs, scored JSONL artifacts, experiment JSON, and summaries |
-| [`dashboard.py`](dashboard.py) | Streamlit comparison and experiment inspector |
-| [`screenshots/`](screenshots/) | Dashboard screenshots used in this README |
-| [`pyproject.toml`](pyproject.toml), [`uv.lock`](uv.lock) | Python requirements and dependency lockfile |
-
-## Teaching Path
-
-1. **Read one test case.** Start with the question and expected answer in the dataset, then inspect its actual answer and retrieved passages in `v2/results2.jsonl`.
-2. **Judge one dimension.** Run a script in `single_criteria_testing/`, read the score and reason, and discuss what that metric does not tell you.
-3. **Audit the evidence.** Compare `v1`'s model-written `context` with `v2`'s actual retrieved passages. Identify which one is suitable for evaluating retrieval.
-4. **Change one variable.** Compare `k=3`, `k=1`, and `k=2`; inspect low-scoring rows instead of relying only on averages.
-5. **Design the next experiment.** Change a retriever setting, prompt, or evaluation case; run the same metrics and record a new summary alongside the baseline.
+| [`RAG1/agent.py`](RAG1/agent.py) | LangChain agent and `ask(question)` entry point |
+| [`RAG1/tools.py`](RAG1/tools.py) | Retrieval tool and active `k` setting |
+| [`RAG1/indexing.py`](RAG1/indexing.py) | PDF chunk embedding and in-memory vector store setup |
+| [`RAG1/file_reader.py`](RAG1/file_reader.py) | PDF text extraction helper |
+| [`RAG1/prompts.py`](RAG1/prompts.py) | System prompt for the RAG assistant |
+| [`RAG1/objects.py`](RAG1/objects.py) | Pydantic response schema |
+| [`versions/v1/`](versions/v1/) | First saved evaluation run: runner, metric scripts, scored results, summary |
+| [`versions/v2/`](versions/v2/) | Second saved evaluation run: runner, metric scripts, scored results, summary |
+| [`versions/v3/`](versions/v3/) | Third saved evaluation run: runner, metric scripts, scored results, summary |
+| [`single_tests/`](single_tests/) | Standalone DeepEval metric demos |
+| [`compare_experiments.py`](compare_experiments.py) | Helper script with hard-coded comparison filenames |
+| [`save_experiment.py`](save_experiment.py) | Helper script for writing an evaluation summary from evaluated results |
+| [`main.py`](main.py) | Placeholder entry point |
 
 ## Practical Notes
 
-- The dataset is deliberately small and covers one PDF. Treat these scores as an exercise in evaluation design, not a broad benchmark.
-- RAG indexing is in memory and runs on import. Each fresh run embeds the PDF again.
-- The model and embedding names are set in the RAG source files; changing them changes the experiment.
-- [`RAG3/agent.py`](RAG3/agent.py) calls `ask(...)` at import time, so a `v3` runner currently makes one extra example request before processing the dataset.
-- [`main.py`](main.py) is a placeholder. Use the evaluation scripts and Streamlit command above as the working entry points.
+- The dataset is intentionally small and centered on one PDF, so treat the results as an evaluation-design exercise rather than a broad benchmark.
+- The vector store is in memory and is rebuilt when [`RAG1/indexing.py`](RAG1/indexing.py) is imported.
+- The runner scripts call OpenAI for embeddings and answer generation; the metric scripts call DeepEval judges. These runs can take time and may incur API costs.
+- Several helper scripts use hard-coded filenames. Check the input and output paths before using them for a new evaluation run.
